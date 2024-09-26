@@ -132,8 +132,11 @@ st.plotly_chart(fig)
 df_clean['eol'] = pd.to_datetime(df_clean['eol'], errors='coerce')
 df_clean['eogs'] = pd.to_datetime(df_clean['eogs'], errors='coerce')
 
+
 # Filter out rows where either EOL or EOGL is missing
 df_filtered = df_clean.dropna(subset=['eol', 'eogs'])
+df_filtered['serial_number'] = df_clean['ip'].apply(lambda x: x.split('/')[2])
+df_filtered['ip_type'] = df_clean['ip'].apply(lambda x: x.split('/')[0])
 
 # Create a Plotly figure
 fig = go.Figure()
@@ -197,14 +200,15 @@ df_timeline = pd.DataFrame({
     'End': df_filtered['eogs']  # EOGL as the end of guaranteed support
 })
 
+
 # Ensure there are no missing datetime values in 'End' after conversion
 df_timeline = df_timeline.dropna(subset=['End'])
 
 # Create the timeline chart using Plotly Express
 fig = px.timeline(df_timeline, x_start='Start', x_end='End', y='Product', title="Product Support Timeline")
 
-# Add today's date as a vertical line using the add_vline method
-fig.add_vline(x=today, line=dict(color="green", dash="dash"), annotation_text="Today", annotation_position="top")
+# # Add today's date as a vertical line using the add_vline method
+# fig.add_vline(x=today, line=dict(color="green", dash="dash"), annotation_text="Today", annotation_position="top")
 
 # Update layout to show date formatting on the x-axis
 fig.update_layout(
