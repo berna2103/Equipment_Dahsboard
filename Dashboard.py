@@ -181,23 +181,30 @@ st.plotly_chart(fig)
 
 ############### PLOT EOL and EOGL    #################################################
 
-# Create a DataFrame for the timeline chart
-# The timeline chart will use EOGL as the end date of the bars and today as the start of support for visualization
+# Get today's date as a pandas datetime object
+today = pd.to_datetime(datetime.today())
 
 # Filter out rows where either EOL or EOGL is missing
 df_filtered = df_clean.dropna(subset=['eol', 'eogs'])
+
+# Ensure that the 'eogs' column (End of Guaranteed Support) is a datetime object
+df_filtered['eogs'] = pd.to_datetime(df_filtered['eogs'], errors='coerce')
+
+# Create the DataFrame for the timeline, ensuring all datetime fields are in pandas datetime format
 df_timeline = pd.DataFrame({
     'Product': df_filtered['ip'],
-    'Start': pd.to_datetime('today'),  # Use today's date as the starting point for support timeline
-    'End': df_filtered['eogs']    # EOGL as the end of guaranteed support
+    'Start': [today] * len(df_filtered),  # Create a Start column with today's date for each row
+    'End': df_filtered['eogs']  # EOGL as the end of guaranteed support
 })
 
-# Create the timeline chart
+# Ensure there are no missing datetime values in 'End' after conversion
+df_timeline = df_timeline.dropna(subset=['End'])
+
+# Create the timeline chart using Plotly Express
 fig = px.timeline(df_timeline, x_start='Start', x_end='End', y='Product', title="Product Support Timeline")
 
-# Add a vertical line for today's date
-today = datetime.today()
-fig.add_vline(x=today, line_width=2, line_dash="dash", line_color="green", annotation_text='Today')
+# Add today's date as a vertical line using the add_vline method
+fig.add_vline(x=today, line=dict(color="green", dash="dash"), annotation_text="Today", annotation_position="top")
 
 # Update layout to show date formatting on the x-axis
 fig.update_layout(
