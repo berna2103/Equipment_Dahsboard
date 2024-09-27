@@ -79,13 +79,21 @@ if uploaded_file:
         'Device Age': 'device_age',
         'Customer/Device Acceptance Date': 'cat',
         'EoGS Date IP': 'eogs',
-        'Installed Product: Installed Product': 'ip'
+        'Installed Product: Installed Product': 'ip',
+        'Primary Technician: City': 'technician_city',
+        'Primary Technician: Zip': 'technician_zip',
+        'Primary Technician: State': 'technician_state',
+        'Primary Technician: Street': 'technician_street',
+        'Primary Technician: Service Manager': 'manager'
+
     }, inplace=True)
 
-    # Clean data and add address column
+  
+
+    # Clean data and add address columns for IPs and technicians
     df_clean = df.dropna(subset=['location'])
     df_clean['address'] = df_clean.apply(lambda row: f"{row['street']}, {row['city']}, {row['state']}, {str(row['zipcode'])[:5]}", axis=1)
-    
+
     # Initialize geocoder
     geolocator = Nominatim(user_agent="LocatingMachines")
     def geocode_address(address):
@@ -138,7 +146,39 @@ if uploaded_file:
                         cols[j].metric(label=device_type_frequency.index[i + j], value=device_type_frequency.values[i + j])
         with col2:
             # Plot device locations on a map
-            fig = px.scatter_mapbox(df_clean, lat="latitude", lon="longitude", zoom=4, height=750, width=750)
+            # Step 1: Find unique FSEs and corresponding address
+            df_clean['technician_address'] = df_clean.apply(lambda row: f"{row['technician_street']},{row['technician_city']}, {row['technician_zip']}, {str(row['technician_state'])[:5]}", axis=1)
+            
+            unique_fse_df = df_clean.drop_duplicates(subset='primary_fse')
+            unique_fse_df[['latitude', 'longitude']] = unique_fse_df['technician_address'].apply(geocode_address)
+
+            # Step 2: Combine technician_city, technician_zip, and technician_state into one 'technician_address' column
+            # Step 1: Add a 'dataset' column to differentiate the two sets of data
+            df_clean['dataset'] = 'IPs'
+            unique_fse_df['dataset'] = 'FSEs'
+            # Step 2: Combine both datasets
+            combined_df = pd.concat([df_clean, unique_fse_df], ignore_index=True)
+
+            # Make the size column for larger dots
+            combined_df['size'] = [15 if dataset == 'unique_fse' else 10 for dataset in combined_df['dataset']]
+
+
+            fig = px.scatter_mapbox(combined_df, 
+                                    lat="latitude", 
+                                    lon="longitude", 
+                                    zoom=4, 
+                                    height=750, 
+                                    width=750, 
+                                    color='dataset', 
+                                    hover_name='primary_fse', 
+                                    hover_data=['account'], 
+                                    size='size',
+                                    size_max=10,  # Maximum size of dots
+                                    color_discrete_map={
+                                    'IPs': 'green',  # Color for original data points
+                                    'FSEs': 'red'  # Color for unique FSE data points
+                                    },)
+            
             fig.update_layout(mapbox_style="carto-positron")
             st.plotly_chart(fig)
 
