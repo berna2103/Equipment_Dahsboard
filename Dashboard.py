@@ -15,8 +15,9 @@ st.title('Region Overview')
 
 if os.path.exists(excel_file_with_coordinates):
     df = pd.read_excel("./data/output_excel.xlsx")
+    st.write(df)
 else:
-    df = pd.read_csv("./data/Equipment_Bernardo.csv")
+    df = pd.read_csv("./data/Josh.csv")
 
 df.rename(
     columns= {
@@ -77,13 +78,16 @@ else:
     df_clean.to_excel('output_excel_coordinates_missing.xlsx', sheet_name='data')
     df_clean_no_coordinates = df_clean.dropna(subset=['latitude', 'longitude'])
     df_clean_no_coordinates.to_excel('./data/output_excel.xlsx', sheet_name='data')
+    st.write(df_clean_no_coordinates)
 
 # Region Metrics
 head_count = len(df_clean['primary_fse'].unique())
 average_equipment_age = df_clean['device_age'].mean()
 median_equipment_age = df_clean['device_age'].median()
-df_clean['ip_device_type'] = df_clean['ip'].str.split('/').str[0]
+df_clean['ip_device_type'] = df['ip'].str.split('/').str[0] 
+df_clean['serial_number'] = df['ip'].str.split('/').str[0]  + df_clean['ip'].apply(lambda x: str(x.split('/')[2]))
 
+st.write(df_clean)
 device_type_frequency = df_clean['ip_device_type'].value_counts()
 # Convert unique values and counts to lists
 unique_values = device_type_frequency.index.tolist()
@@ -120,10 +124,19 @@ sorted_data = df_clean.sort_values(by='device_age')
 # Create the bar chart with custom bar width
 device_age_fig = go.Figure(go.Bar(
     y=sorted_data['device_age'],
-    x=sorted_data['ip'],
+    x=sorted_data['serial_number'],
     # width=[0.9]*len(sorted_data),  # Set a fixed width for all bars
       # horizontal bar chart (optional)
 ))
+# Add a vertical line for today's date from top to bottom of the chart
+device_age_fig.add_hline(
+    y=11,
+    line_width=2,
+    line_dash="dash",
+    line_color="green",
+    annotation_text="Start Replacement Process",  # Optional: Adds text near the line
+    annotation_position="top left"
+)
 
 st.plotly_chart(device_age_fig)
 
@@ -132,12 +145,13 @@ st.plotly_chart(device_age_fig)
 ############ Plot points on a MAP using Plotly Express #############################
 st.header("Region's Device Locations")
 fig = px.scatter_mapbox(df_clean, 
+                        hover_data=['account','address','ip'],
                         lat="latitude", 
                         lon="longitude", 
                         hover_name="location",
                         
                         zoom=5, 
-                        height=800)
+                        height=600)
 
 # Set map style and layout
 fig.update_layout(mapbox_style="open-street-map")
@@ -164,16 +178,16 @@ fig = go.Figure()
 
 # Add scatter plots for EOL and EOGL
 fig.add_trace(go.Scatter(
-    x=df_filtered['ip'],
-    y=df_filtered['eol'],
+    y=df_filtered['ip'],
+    x=df_filtered['eol'],
     mode='markers',
     name='End of Life (EOL)',
     marker=dict(color='red')
 ))
 
 fig.add_trace(go.Scatter(
-    x=df_filtered['ip'],
-    y=df_filtered['eogs'],
+    y=df_filtered['ip'],
+    x=df_filtered['eogs'],
     mode='markers',
     name='End of Guaranteed Support (EOGS)',
     marker=dict(color='blue')
@@ -181,21 +195,33 @@ fig.add_trace(go.Scatter(
 
 # Add a vertical line for today's date
 today = datetime.today()
+#today = pd.to_datetime(datetime.today())
 # Add an annotation for today's date instead of using a line
-fig.add_trace(go.Scatter(
-    x=[df_filtered['ip'].iloc[-1]],  # Position annotation near the last product
-    y=[today],  # Today's date on the y-axis
+fig.add_trace(go.Line(
+    y=[df_filtered['ip'].iloc[-1]],  # Position annotation near the last product
+    x=[today],  # Today's date on the x-axis
     mode='lines+text',
     text=['Today'],
     showlegend=False,
-    textposition="bottom right"
+    textposition="top right",
 ))
+
+# Add a vertical line for today's date from top to bottom of the chart
+# fig.add_vline(
+#     x=today,
+#     line_width=2,
+#     line_dash="dash",
+#     line_color="green",
+#     annotation_text="Today",  # Optional: Adds text near the line
+#     annotation_position="top right"
+# )
 
 
 # Update layout
 fig.update_layout(
     xaxis_title="Products",
     yaxis_title="Date",
+    height=900,
     xaxis=dict(tickvals=df_filtered['ip']),
 )
 
@@ -215,17 +241,30 @@ df_filtered['eogs'] = pd.to_datetime(df_filtered['eogs'], errors='coerce')
 
 # Create the DataFrame for the timeline, ensuring all datetime fields are in pandas datetime format
 df_timeline = pd.DataFrame({
+    'Account': df_filtered['account'],
     'Product': df_filtered['ip'],
     'Start': [today] * len(df_filtered),  # Create a Start column with today's date for each row
-    'End': df_filtered['eogs']  # EOGL as the end of guaranteed support
+    'End': df_filtered['eol']  # EOGL as the end of guaranteed support
 })
 
 
 # Ensure there are no missing datetime values in 'End' after conversion
 df_timeline = df_timeline.dropna(subset=['End'])
 
+# Add a new column to indicate whether the End date is in the past or future
+df_timeline['Status'] = df_timeline['End'].apply(lambda x: 'Past' if x < today else 'Future')
+
+
 # Create the timeline chart using Plotly Express
-fig = px.timeline(df_timeline, x_start='Start', x_end='End', y='Product', title="Product Support Timeline")
+fig = px.timeline(df_timeline, 
+                  x_start='Start', 
+                  x_end='End', 
+                  y='Product', 
+                  height=1000, 
+                  hover_data=['Account'],
+                  color='Status',
+                  color_discrete_map={'Past': 'red', 'Future': 'green'} ,
+                  title="EOL Product Timeline")
 
 # # Add today's date as a vertical line using the add_vline method
 # fig.add_vline(x=today, line=dict(color="green", dash="dash"), annotation_text="Today", annotation_position="top")
@@ -234,8 +273,9 @@ fig = px.timeline(df_timeline, x_start='Start', x_end='End', y='Product', title=
 fig.update_layout(
     xaxis_title="Date",
     yaxis_title="Products",
-    xaxis=dict(tickformat="%Y-%m-%d"),
-    showlegend=False
+    xaxis=dict(tickformat="%m-%d-%Y"),
+    showlegend=False,
+    
 )
 
 # Display the figure in Streamlit
