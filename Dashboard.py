@@ -53,7 +53,7 @@ geolocator = Nominatim(user_agent="LocatingMachines")
 def geocode_address(address):
     print(f"Geocoding: {address}")
     try:
-        location = geolocator.geocode(address, timeout=5)
+        location = geolocator.geocode(address, timeout=10)
         
         if location:
             print(f"Found: {location.latitude}, {location.longitude}")  # Print the found coordinates
@@ -79,24 +79,43 @@ else:
     df_clean_no_coordinates.to_excel('./data/output_excel.xlsx', sheet_name='data')
 
 # Region Metrics
-head_count = len(df_clean['secondary_fse'].unique())
+head_count = len(df_clean['primary_fse'].unique())
 average_equipment_age = df_clean['device_age'].mean()
 median_equipment_age = df_clean['device_age'].median()
+df_clean['ip_device_type'] = df_clean['ip'].str.split('/').str[0]
 
-st.dataframe(df_clean)
+device_type_frequency = df_clean['ip_device_type'].value_counts()
+# Convert unique values and counts to lists
+unique_values = device_type_frequency.index.tolist()
+counts = device_type_frequency.tolist()
+
 
 container = st.container(border=True)
 
 with container:
     col1, col2, col3 = st.columns(3)
+    col4,col5, col6 = st.columns(3)
     with col1:
         st.metric(label= 'Head Count', value= head_count)
     with col2:
         st.metric(label='Average Device Age', value= f'{round(average_equipment_age, 2)} yrs')
     with col3:
         st.metric(label='Total IPs', value=(len(df_clean['device_age'])))
+    
+    # Step 4: Display metrics in rows of 3 columns
+    for i in range(0, len(unique_values), 3):
+        # Create 3 columns for the current row
+        cols = st.columns(3)
+        # Display up to 3 metrics per row
+        for j in range(3):
+            if i + j < len(unique_values):
+                # Assign value and count to the appropriate column
+                cols[j].metric(label=unique_values[i + j], value=counts[i + j])
+        
+st.divider()
 
 ############### PLOT DEVICE AGE #################################################
+st.header('Device Age')
 sorted_data = df_clean.sort_values(by='device_age')
 # Create the bar chart with custom bar width
 device_age_fig = go.Figure(go.Bar(
@@ -107,11 +126,11 @@ device_age_fig = go.Figure(go.Bar(
 ))
 
 st.plotly_chart(device_age_fig)
-st.write(sorted_data)
 
 ############END OF PLOT DEVICE AGE ##################################################
 
 ############ Plot points on a MAP using Plotly Express #############################
+st.header("Region's Device Locations")
 fig = px.scatter_mapbox(df_clean, 
                         lat="latitude", 
                         lon="longitude", 
@@ -128,6 +147,8 @@ st.plotly_chart(fig)
 
 
 ############### PLOT EOL and EOGL    #################################################
+
+st.header("EOL and EOGS")
 # Convert the EOL and EOGL columns to datetime format
 df_clean['eol'] = pd.to_datetime(df_clean['eol'], errors='coerce')
 df_clean['eogs'] = pd.to_datetime(df_clean['eogs'], errors='coerce')
@@ -173,7 +194,6 @@ fig.add_trace(go.Scatter(
 
 # Update layout
 fig.update_layout(
-    title="Installed Products with EOL and EOGL",
     xaxis_title="Products",
     yaxis_title="Date",
     xaxis=dict(tickvals=df_filtered['ip']),
@@ -183,7 +203,7 @@ fig.update_layout(
 st.plotly_chart(fig)
 
 ############### PLOT EOL and EOGL    #################################################
-
+st.header('Installed product support timeline')
 # Get today's date as a pandas datetime object
 today = pd.to_datetime(datetime.today())
 
