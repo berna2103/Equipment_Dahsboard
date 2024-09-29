@@ -6,6 +6,9 @@ import plotly.express as px
 from geopy.geocoders import Nominatim
 import plotly.graph_objects as go
 from datetime import datetime
+from pptx import Presentation
+from pptx.util import Inches
+import plotly.io as pio
 
 # Set page configuration
 st.set_page_config(layout="wide")
@@ -19,7 +22,7 @@ metric_style = """
     align-items: center;
     justify-content: center;
     height: 150px;
-    width: 200px;
+    width: 180px;
     border: 1px solid #ccc;
     border-radius: 5px;
     padding: 10px;
@@ -42,10 +45,10 @@ metric_style = """
 
 st.markdown(metric_style, unsafe_allow_html=True)
 
-
 # Define constants
 EXCEL_FILE_WITH_COORDINATES = "./data/output_excel.xlsx"
 REPORT_URL = 'https://elekta.my.salesforce.com/00O6g000006RqPX'
+MAP_PATH = 'graphs/map.png'
 
 # Initialize dataframe
 df = pd.DataFrame()
@@ -60,10 +63,10 @@ uploaded_file = st.sidebar.file_uploader("Choose CSV File", type=['csv'])
 # Check if a file is uploaded
 if uploaded_file:
     # Load data from existing excel file or uploaded csv file
-    if os.path.exists(EXCEL_FILE_WITH_COORDINATES):
-        df = pd.read_excel(EXCEL_FILE_WITH_COORDINATES)
-    else:
-        df = pd.read_csv(uploaded_file)
+    # if os.path.exists(EXCEL_FILE_WITH_COORDINATES):
+    #     df = pd.read_excel(EXCEL_FILE_WITH_COORDINATES)
+    # else:
+    df = pd.read_csv(uploaded_file)
 
     # Rename columns for consistency
     df.rename(columns={
@@ -89,7 +92,6 @@ if uploaded_file:
     }, inplace=True)
 
   
-
     # Clean data and add address columns for IPs and technicians
     df_clean = df.dropna(subset=['location'])
     df_clean['address'] = df_clean.apply(lambda row: f"{row['street']}, {row['city']}, {row['state']}, {str(row['zipcode'])[:5]}", axis=1)
@@ -163,7 +165,7 @@ if uploaded_file:
             combined_df['size'] = [15 if dataset == 'unique_fse' else 10 for dataset in combined_df['dataset']]
 
 
-            fig = px.scatter_mapbox(combined_df, 
+            map_fig = px.scatter_mapbox(combined_df, 
                                     lat="latitude", 
                                     lon="longitude", 
                                     zoom=4, 
@@ -179,8 +181,11 @@ if uploaded_file:
                                     'FSEs': 'red'  # Color for unique FSE data points
                                     },)
             
-            fig.update_layout(mapbox_style="carto-positron")
-            st.plotly_chart(fig)
+            map_fig.update_layout(mapbox_style="carto-positron")
+            map_fig.update_layout(margin={"r":0,"t":0,"l":0,"b":0})
+            
+            st.plotly_chart(map_fig)
+            pio.write_image(map_fig, MAP_PATH)
 
 
 
@@ -192,18 +197,21 @@ if uploaded_file:
     device_age_fig.add_hline(y=12, line_width=3, line_dash="dash", line_color="gray", annotation_text="Due for replacement age > 12", annotation_position="top left")
     device_age_fig.update_layout(height=700)
     st.plotly_chart(device_age_fig)
+    device_age_fig.write_image('graphs/device_age_fig.png')
 
-    # Plot EOL and EOGS timelines
+    # Plot EOL timelines
     st.title('IP EOL Timeline')
     df_clean['eol'] = pd.to_datetime(df_clean['eol'], errors='coerce')
     df_clean['eogs'] = pd.to_datetime(df_clean['eogs'], errors='coerce')
-    today = pd.to_datetime(datetime.today())
+    today = datetime.today()
+
     df_filtered = df_clean.dropna(subset=['eol', 'eogs'])
     df_filtered['eogs'] = pd.to_datetime(df_filtered['eogs'], errors='coerce')
     df_timeline = pd.DataFrame({'Account': df_filtered['account'], 'Product': df_filtered['ip'], 'Start': [today] * len(df_filtered), 'End': df_filtered['eol']})
     df_timeline['Status'] = df_timeline['End'].apply(lambda x: 'Past' if x < today else 'Future')
     fig = px.timeline(df_timeline, x_start='Start', x_end='End', y='Product', height=1000, color='Status', color_discrete_map={'Past': 'red', 'Future': 'green'}, title="EOL Product Timeline")
     fig.update_layout(xaxis_title="Date", yaxis_title="Products", xaxis=dict(tickformat="%m-%d-%Y"), showlegend=False)
+
     st.plotly_chart(fig)
 
     # Plot EOGS timeline
@@ -214,6 +222,64 @@ if uploaded_file:
     fig.update_layout(xaxis_title="Date", yaxis_title="Products", xaxis=dict(tickformat="%m-%d-%Y"), showlegend=False)
     st.plotly_chart(fig)
 
+        # Create a new presentation
+    prs = Presentation()
+
+    # Ensure the 'graphs' directory exists
+    if not os.path.exists('graphs'):
+        os.makedirs('graphs')
+
+    # Slide 1: Main Slide
+    slide_layout = prs.slide_layouts[0]
+    slide = prs.slides.add_slide(slide_layout)
+
+    # Add title
+    title = slide.shapes.title
+    title.text = "Region Overview"
+
+    # Add head_count, average_equipment_age, and device_type_frequency as text
+    left = Inches(1)
+    top = Inches(1.5)
+    width = Inches(3)
+    height = Inches(1)
+
+    txBox = slide.shapes.add_textbox(left, top, width, height)
+    tf = txBox.text_frame
+    tf.text = f"Head Count: {head_count}\nAverage IP Age: {round(average_equipment_age, 2)}\nDevice Type Frequency: {device_type_frequency}"
+
+    # Save map as image and add to slide
+    map_path = 'graphs/map.png'
+    fig.write_image(map_path)
+
+    left = Inches(5)
+    top = Inches(1.5)
+    width = Inches(5)
+    height = Inches(5)
+
+    pic = slide.shapes.add_picture(map_path, left, top, width, height)
+
+    # Slide 2: Device Age
+    slide_layout = prs.slide_layouts[0]
+    slide = prs.slides.add_slide(slide_layout)
+
+    # Add title
+    title = slide.shapes.title
+    title.text = "Device Age"
+
+    # Save device_age_fig as image and add to slide
+    device_age_fig_path = 'graphs/device_age_fig.png'
+    device_age_fig.write_image(device_age_fig_path)
+
+    left = Inches(1)
+    top = Inches(1.5)
+    width = Inches(9)
+    height = Inches(5)
+
+    pic = slide.shapes.add_picture(device_age_fig_path, left, top, width, height)
+
+    # Save the presentation
+    prs.save('region_overview.pptx')
+
 
 # Display instructions if no file is uploaded
 else:
@@ -223,3 +289,5 @@ else:
     st.write('2. Customized and enter RSM name.')
     st.write('3. Run report')
     st.write('4. Export to csv file.')
+
+
