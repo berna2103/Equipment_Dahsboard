@@ -9,9 +9,11 @@ from datetime import datetime
 from pptx import Presentation
 from pptx.util import Inches
 import plotly.io as pio
+import datetime
 
 # Set page configuration
 st.set_page_config(layout="wide")
+TIME_STAMP = datetime.datetime.now()
 
 # Define CSS styles
 metric_style = """
@@ -115,13 +117,17 @@ if uploaded_file:
             return pd.Series([None, None])
         
 
-    # If coordinates are missing, geocode addresses and save to excel
-    if not os.path.exists(EXCEL_FILE_WITH_COORDINATES):
+
     # Function to get latitude and longitude from an address
-        df_clean[['latitude', 'longitude']] = df_clean['address'].apply(geocode_address)
-        df_clean.to_excel('./data/output_excel_coordinates_missing.xlsx', sheet_name='data')
-        df_clean_no_coordinates = df_clean.dropna(subset=['latitude', 'longitude'])
-        df_clean_no_coordinates.to_excel('./data/output_excel.xlsx', sheet_name='data')
+    manager = df_clean.loc[2, 'manager']
+    df_clean[['latitude', 'longitude']] = df_clean['address'].apply(geocode_address)
+    directory = f'data/{manager}'
+    if not os.path(directory):
+        os.makedirs(directory)
+   
+    df_clean.to_excel(f'./data/{manager}/report_{manager}_{TIME_STAMP}.xlsx', sheet_name='data')
+    df_clean_no_coordinates = df_clean.dropna(subset=['latitude', 'longitude'])
+    df_clean_no_coordinates.to_excel(f'./data/{manager}report_{manager}_{TIME_STAMP}.xlsx', sheet_name='data')
 
 
     # Display region metrics
