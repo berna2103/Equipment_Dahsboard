@@ -9,11 +9,13 @@ from datetime import datetime
 from pptx import Presentation
 from pptx.util import Inches
 import plotly.io as pio
-import datetime
+import datetime as dt
 
 # Set page configuration
 st.set_page_config(layout="wide")
-TIME_STAMP = datetime.datetime.now()
+TIME_STAMP = dt.datetime.now()
+
+st.write(TIME_STAMP)
 
 # Define CSS styles
 metric_style = """
@@ -122,12 +124,12 @@ if uploaded_file:
     manager = df_clean.loc[2, 'manager']
     df_clean[['latitude', 'longitude']] = df_clean['address'].apply(geocode_address)
     directory = f'data/{manager}'
-    if not os.path(directory):
+    if not os.path.exists(directory):
         os.makedirs(directory)
    
     df_clean.to_excel(f'./data/{manager}/report_{manager}_{TIME_STAMP}.xlsx', sheet_name='data')
     df_clean_no_coordinates = df_clean.dropna(subset=['latitude', 'longitude'])
-    df_clean_no_coordinates.to_excel(f'./data/{manager}report_{manager}_{TIME_STAMP}.xlsx', sheet_name='data')
+    df_clean_no_coordinates.to_excel(f'./data/{manager}_missing_coordinates_{manager}_{TIME_STAMP}.xlsx', sheet_name='data')
 
 
     # Display region metrics
